@@ -39,18 +39,20 @@ object Json {
     val sc = ssc.sparkContext
     val streamSqlContext = new org.apache.spark.sql.SQLContext(sc)
 
-    /*Importamos taxonomías*/
+    /*Importamos taxonomías
     val rutaTax = "file:///C:/Users/plopez/Desktop/Taxonomias.csv" //URL a identificador
     val camposTax = "file:///C:/Users/plopez/Desktop/DictTax.csv" //identificador a taxoniomía
     val camposGenerales = "file:///C:/Users/plopez/Desktop/dictVarSanitas.txt" //Campos que contiene el Json recibido
 
-    /* Versión en el servidor, en un futuro se pasará como argumentos
+*/
+
+    /* Versión en el servidor, en un futuro se pasará como argumentos */
     val rutaTax = "file:///Pablo/Taxonomias.csv" //URL a identificador
     val camposTax = "file:///Pablo/DictTax.csv" //identificador a taxoniomía
     val camposGenerales = "file:///Pablo/dictVarSanitas.txt" //Campos que contiene el Json recibido
     //    val rutaTrafico = args(3)    No se usa, la ruta es lo que leemos de kafka, seguramente sea el topic
     //    val destino = args(4)  Es HBase, aún desconocemos que meteremos al final, seguramente el HBase colum adn y tabla
-    */
+
 
     val tax = sc.textFile(rutaTax, 1)
     val taxFM = tax.map(x => (x.split(";")(0), x.split(";")(1)))
