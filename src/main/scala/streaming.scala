@@ -61,45 +61,51 @@ object streaming{
         /*Traducimos el Json a RDD */
         val traficoRDD = streamSqlContext.read.json(k).selectExpr(List("idTracker","decay", "url") ++ camposGeneralesRDD.collect(): _*).rdd.keyBy(t => if (t.getAs[String]("url").indexOf('?') > 0) t.getAs[String]("url").substring(0, t.getAs[String]("url").indexOf('?')) else t.getAs[String]("url"))//url,Array[idTracker,url..]
         val dateFormat =  new SimpleDateFormat(("yyyyMMdd"))
-        var traficoTax = traficoRDD.join(taxFM).map(x => Array(x._2._1.getAs("idTracker").toString(),dateFormat.format(x._2._1(1))++"00","idTax"+ x._2._2,x._2._1.toSeq.toArray.drop(2).mkString(","))) //(idTracker,TimeStamp,idTax,Url...etc)
-//        println("-------Trafico Trafico Tax-------------- ")
-//        traficoTax.collect.foreach(println)
-        putHBase(traficoTax)
-        sc.setLogLevel("ERROR")
+        var joinTax = traficoRDD.join(taxFM)//url,(Row,String)
+        var traficoTax = joinTax.map(x => Array(x._2._1.getAs("idTracker").toString(),dateFormat.format(x._2._1(1))++"00", "idTax"+ x._2._2, x._2._1(2).toString,x._2._1(3).toString,x._2._1(4).toString,x._2._1(5).toString,x._2._1(6).toString)) //(idTracker,TimeStamp,idTax,Url...etc)
 
-        def putHBase(rdd:RDD[Array[String]]):Unit = {
+      traficoTax.foreachPartition(putHBase)
+        }
+    }
 
-          val config = HBaseConfiguration.create()
-          val hbaseContext = new HBaseContext(sc, config)
-          ssc.checkpoint("/tmp/spark_checkpoint")
+       def putHBase(partitions: Iterator[Array[String]]):Unit = {
 
-          val APP_NAME: String = "SparkHbaseJob"
-          var HBASE_DB_HOST: String = null
-          var HBASE_TABLE: String = null
-          var HBASE_COLUMN_FAMILY: String = null
+          var row = partitions.toList(0)//Array[Strings]
 
-          HBASE_DB_HOST="127.0.0.1"
-          HBASE_TABLE="usuarios"
-          HBASE_COLUMN_FAMILY="adn"
+//          val config = HBaseConfiguration.create()
+//          val hbaseContext = new HBaseContext(sc, config)
+//          ssc.checkpoint("/tmp/spark_checkpoint")
+//
+//          val APP_NAME: String = "SparkHbaseJob"
+//          var HBASE_DB_HOST: String = null
+//          var HBASE_TABLE: String = null
+//          var HBASE_COLUMN_FAMILY: String = null
+//
+//          HBASE_DB_HOST="127.0.0.1"
+//          HBASE_TABLE="usuarios"
+//          HBASE_COLUMN_FAMILY="adn"
+//
+//          val conf = HBaseConfiguration.create()
+//          conf.set(TableInputFormat.INPUT_TABLE, HBASE_TABLE)
+//          val connection = ConnectionFactory.createConnection(conf)
+//          val table = connection.getTable(TableName.valueOf(Bytes.toBytes(HBASE_TABLE)))
 
-          val conf = HBaseConfiguration.create()
-          conf.set(TableInputFormat.INPUT_TABLE, HBASE_TABLE)
-          val connection = ConnectionFactory.createConnection(conf)
-          val table = connection.getTable(TableName.valueOf(Bytes.toBytes(HBASE_TABLE)))
+            //IdTracker,timestamp (YYYYMMDD), idTax, URL....
 
-          traficoTax.map( putRecord=> { //IdTracker,timestamp (YYYYMMDD), idTax, URL....
 
+           for( i <- 2 to row.length-1){
+              println("Key "+row(0)+","+"timestamp "+row(1)+","+"columna "+""+row(i))
+            }
             //POR CADA COLUMNA REALIZO UN PUT
-            val put = new Put(Bytes.toBytes(putRecord(0).toString))//idTracker
+            //val put = new Put(Bytes.toBytes(putRecord(0).toString))//idTracker
 //                  mapaVarGen.map(l=>
 //                    put.addColumn( Bytes.toBytes("adn"),  Bytes.toBytes(l._1), Bytes.toBytes(putRecord._1.getAs(l._1).toString))
 //                  )
-            put.addColumn( Bytes.toBytes("adn"),  Bytes.toBytes("idTax"+putRecord._2), Bytes.toBytes(putRecord._2))//colFamily,col,timestamp,value
-            table.put(put)
-          })
-        }
+          //  put.addColumn( Bytes.toBytes("adn"),  Bytes.toBytes("idTax"+putRecord._2), Bytes.toBytes(putRecord._2))//colFamily,col,timestamp,value
+            //table.put(put)
+
+
       }
-    }
     ssc.start()
     ssc.awaitTermination()
   }
