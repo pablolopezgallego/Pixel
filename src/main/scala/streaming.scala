@@ -72,23 +72,23 @@ object streaming{
 
           var row = partitions.toList(0)//Array[Strings]
 
-//          val config = HBaseConfiguration.create()
-//          val hbaseContext = new HBaseContext(sc, config)
-//          ssc.checkpoint("/tmp/spark_checkpoint")
-//
-//          val APP_NAME: String = "SparkHbaseJob"
-//          var HBASE_DB_HOST: String = null
-//          var HBASE_TABLE: String = null
-//          var HBASE_COLUMN_FAMILY: String = null
-//
-//          HBASE_DB_HOST="127.0.0.1"
-//          HBASE_TABLE="usuarios"
-//          HBASE_COLUMN_FAMILY="adn"
-//
-//          val conf = HBaseConfiguration.create()
-//          conf.set(TableInputFormat.INPUT_TABLE, HBASE_TABLE)
-//          val connection = ConnectionFactory.createConnection(conf)
-//          val table = connection.getTable(TableName.valueOf(Bytes.toBytes(HBASE_TABLE)))
+          val config = HBaseConfiguration.create()
+          val hbaseContext = new HBaseContext(sc, config)
+          ssc.checkpoint("/tmp/spark_checkpoint")
+
+          val APP_NAME: String = "SparkHbaseJob"
+          var HBASE_DB_HOST: String = null
+          var HBASE_TABLE: String = null
+          var HBASE_COLUMN_FAMILY: String = null
+
+          HBASE_DB_HOST="127.0.0.1"
+          HBASE_TABLE="usuarios"
+          HBASE_COLUMN_FAMILY="adn"
+
+          val conf = HBaseConfiguration.create()
+          conf.set(TableInputFormat.INPUT_TABLE, HBASE_TABLE)
+          val connection = ConnectionFactory.createConnection(conf)
+          val table = connection.getTable(TableName.valueOf(Bytes.toBytes(HBASE_TABLE)))
 
             //IdTracker,timestamp (YYYYMMDD), idTax, URL....
 
