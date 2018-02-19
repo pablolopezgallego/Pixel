@@ -24,8 +24,8 @@ object streaming{
     val ssc = new StreamingContext(conf, Seconds(10))
 
     /* KafkaConf tiene un Map de la ruta del server de kafka, la ruta del server de zookeeper, el grupo.id del consumidor para poder hacer redundancia, el timeout para conectar a zookeeper */
-    val kafkaConf = Map("metadata.broker.list" -> "51.255.74.114:42111",
-      "zookeeper.connect" -> "51.255.74.114:21000",
+    val kafkaConf = Map("metadata.broker.list" -> "localhost:42111",
+      "zookeeper.connect" -> "localhost:21000",
       "group.id" -> "kafka-example",
       "zookeeper.connection.timeout.ms" -> "1000",
       "zookeeper.session.timeout.ms" -> "10000")
@@ -57,7 +57,7 @@ object streaming{
 
     lines.foreachRDD { k =>
 
-      if (k.count() > 0) {
+      if (!k.partitions.isEmpty) {
         /*Traducimos el Json a RDD */
         val traficoRDD = streamSqlContext.read.json(k).selectExpr(List("idTracker","decay", "url") ++ camposGeneralesRDD.collect(): _*).rdd.keyBy(t => if (t.getAs[String]("url").indexOf('?') > 0) t.getAs[String]("url").substring(0, t.getAs[String]("url").indexOf('?')) else t.getAs[String]("url"))//url,Array[idTracker,url..]
         val dateFormat =  new SimpleDateFormat(("yyyyMMdd"))
@@ -72,7 +72,7 @@ object streaming{
 
           var row = partitions.toList(0)//Array[Strings]
 
-          val config = HBaseConfiguration.create()
+          /*val config = HBaseConfiguration.create()
           val hbaseContext = new HBaseContext(sc, config)
           ssc.checkpoint("/tmp/spark_checkpoint")
 
@@ -89,7 +89,7 @@ object streaming{
           conf.set(TableInputFormat.INPUT_TABLE, HBASE_TABLE)
           val connection = ConnectionFactory.createConnection(conf)
           val table = connection.getTable(TableName.valueOf(Bytes.toBytes(HBASE_TABLE)))
-
+*/
             //IdTracker,timestamp (YYYYMMDD), idTax, URL....
 
 
