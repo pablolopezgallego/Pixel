@@ -13,8 +13,7 @@ import org.apache.spark.streaming.kafka._
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 object streaming{
-  //  org.apache.log4j.BasicConfigurator.configure()
-  def main(args: Array[String]){
+   def main(args: Array[String]){
 
     /** EL código de spark conf para hacer el streaming */
     val conf = new SparkConf().setAppName("HBaseStream")
@@ -24,8 +23,8 @@ object streaming{
     val ssc = new StreamingContext(conf, Seconds(10))
 
     /* KafkaConf tiene un Map de la ruta del server de kafka, la ruta del server de zookeeper, el grupo.id del consumidor para poder hacer redundancia, el timeout para conectar a zookeeper */
-    val kafkaConf = Map("metadata.broker.list" -> "51.255.74.114:42111",
-      "zookeeper.connect" -> "51.255.74.114:21000",
+    val kafkaConf = Map("metadata.broker.list" -> "localhost:42111",
+      "zookeeper.connect" -> "localhost:21000",
       "group.id" -> "kafka-example",
       "zookeeper.connection.timeout.ms" -> "1000",
       "zookeeper.session.timeout.ms" -> "10000")
@@ -34,7 +33,7 @@ object streaming{
     val lines = KafkaUtils.createStream[Array[Byte], String, DefaultDecoder, StringDecoder](
       ssc, kafkaConf, Map("test2" -> 1),
       StorageLevel.MEMORY_ONLY_SER).map(_._2)
-    //    lines.count().print()
+
 
     /* Creamos el streamSqlContext para usar Json */
     val sc = ssc.sparkContext
@@ -53,7 +52,7 @@ object streaming{
     val camposGeneralesRDD = sc.textFile(camposGenerales, 1)
 
     val mapaTax = camposTaxRDD.map(x => (x.split(";")(0), 0)).collect()
-    val mapaVarGen = camposGeneralesRDD.map(x => (x.replaceAll("parametros.", ""), "")).collect()
+    val mapaVarGen = camposGeneralesRDD.map(x => (x.replaceAll("parametros.", ""))).collect()
 
     lines.foreachRDD { k =>
 
@@ -63,8 +62,7 @@ object streaming{
         val dateFormat =  new SimpleDateFormat(("yyyyMMdd"))
         var joinTax = traficoRDD.join(taxFM)//url,(Row,String)
         var traficoTax = joinTax.map(x => Array(x._2._1.getAs("idTracker").toString(),dateFormat.format(x._2._1(1))++"00", "idTax"+ x._2._2, x._2._1(2).toString,x._2._1(3).toString,x._2._1(4).toString,x._2._1(5).toString,x._2._1(6).toString)) //(idTracker,TimeStamp,idTax,Url...etc)
-
-      traficoTax.foreachPartition(putHBase)
+        traficoTax.foreachPartition(putHBase)
         }
     }
 
@@ -89,22 +87,19 @@ object streaming{
           conf.set(TableInputFormat.INPUT_TABLE, HBASE_TABLE)
           val connection = ConnectionFactory.createConnection(conf)
           val table = connection.getTable(TableName.valueOf(Bytes.toBytes(HBASE_TABLE)))
+         //cada evento llega en forma Array(IdTracker,timestamp(YYYYMMDD),idTax, URL....)
 
-            //IdTracker,timestamp (YYYYMMDD), idTax, URL....
+         //Por cada columna realiza un put
+         val put = new Put(Bytes.toBytes(row(0))) //idTracker
 
-
-           for( i <- 2 to row.length-1){
-              println("Key "+row(0)+","+"timestamp "+row(1)+","+"columna "+""+row(i))
-            }
-            //POR CADA COLUMNA REALIZO UN PUT
-            //val put = new Put(Bytes.toBytes(putRecord(0).toString))//idTracker
-//                  mapaVarGen.map(l=>
-//                    put.addColumn( Bytes.toBytes("adn"),  Bytes.toBytes(l._1), Bytes.toBytes(putRecord._1.getAs(l._1).toString))
-//                  )
-          //  put.addColumn( Bytes.toBytes("adn"),  Bytes.toBytes("idTax"+putRecord._2), Bytes.toBytes(putRecord._2))//colFamily,col,timestamp,value
-            //table.put(put)
-
-
+         for (l <- 0 until mapaVarGen.length) {
+           put.addColumn(Bytes.toBytes("adn"), Bytes.toBytes(mapaVarGen(l)), Bytes.toBytes(row(l+3).toString))
+           table.put(put)
+         }
+         //Incremento para la taxonomia
+         val inc = new Increment(Bytes.toBytes(row(0).toString)) //idTracker
+         inc.addColumn(Bytes.toBytes("adn"), Bytes.toBytes(row(2)), 1) //colFamily,col,timestamp,value
+         table.increment(inc)
       }
     ssc.start()
     ssc.awaitTermination()
