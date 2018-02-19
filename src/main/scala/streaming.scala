@@ -11,8 +11,15 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.kafka._
 import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
+
 
 object streaming{
+
+  implicit val formats = DefaultFormats
+  case class adn(idTracker:String,decay:String,url:String,ip:String,useragent:String,os:String,dispositivo:String,language:String)
+  case class parametros(evar7:String,evar39:String,evar49:String)
   //  org.apache.log4j.BasicConfigurator.configure()
   def main(args: Array[String]){
 
@@ -24,8 +31,8 @@ object streaming{
     val ssc = new StreamingContext(conf, Seconds(10))
 
     /* KafkaConf tiene un Map de la ruta del server de kafka, la ruta del server de zookeeper, el grupo.id del consumidor para poder hacer redundancia, el timeout para conectar a zookeeper */
-    val kafkaConf = Map("metadata.broker.list" -> "localhost:42111",
-      "zookeeper.connect" -> "localhost:21000",
+    val kafkaConf = Map("metadata.broker.list" -> "51.255.74.114:42111",
+      "zookeeper.connect" -> "51.255.74.114:21000",
       "group.id" -> "kafka-example",
       "zookeeper.connection.timeout.ms" -> "1000",
       "zookeeper.session.timeout.ms" -> "10000")
@@ -55,18 +62,29 @@ object streaming{
     val mapaTax = camposTaxRDD.map(x => (x.split(";")(0), 0)).collect()
     val mapaVarGen = camposGeneralesRDD.map(x => (x.replaceAll("parametros.", ""), "")).collect()
 
-    lines.foreachRDD { k =>
-
-      if (!k.partitions.isEmpty) {
+    lines.foreachRDD { rdd =>
+      if (!rdd.isEmpty) {
         /*Traducimos el Json a RDD */
-        val traficoRDD = streamSqlContext.read.json(k).selectExpr(List("idTracker","decay", "url") ++ camposGeneralesRDD.collect(): _*).rdd.keyBy(t => if (t.getAs[String]("url").indexOf('?') > 0) t.getAs[String]("url").substring(0, t.getAs[String]("url").indexOf('?')) else t.getAs[String]("url"))//url,Array[idTracker,url..]
-        val dateFormat =  new SimpleDateFormat(("yyyyMMdd"))
-        var joinTax = traficoRDD.join(taxFM)//url,(Row,String)
-        var traficoTax = joinTax.map(x => Array(x._2._1.getAs("idTracker").toString(),dateFormat.format(x._2._1(1))++"00", "idTax"+ x._2._2, x._2._1(2).toString,x._2._1(3).toString,x._2._1(4).toString,x._2._1(5).toString,x._2._1(6).toString)) //(idTracker,TimeStamp,idTax,Url...etc)
+        val traficoRDD = rdd.map(parser).keyBy(x => x(3))
+        // ((traficoRDD.keyBy(t => if (t.getAs[String]("url").indexOf('?') > 0) t.getAs[String]("url").substring(0, t.getAs[String]("url").indexOf('?')) else t.getAs[String]("url"))//url,Array[idTracker,url..]
+        val dateFormat = new SimpleDateFormat(("yyyyMMdd"))
+        var joinTax = traficoRDD.join(taxFM)
+        //url,(Array(String),String))
+        //joinTax.map(x => (x._2._1(0),x._2._1(1),x._2._1(2),x._2._2)).foreach(println)
+        var traficoTax = joinTax.map(x => Array(x._2._1(0).toString(), dateFormat.format(x._2._1(1).toDouble) ++ "00", "idTax" + x._2._2, x._2._1(2).toString, x._2._1(3).toString, x._2._1(4).toString, x._2._1(5).toString, x._2._1(6).toString, x._2._1(7).toString)) //(idTracker,TimeStamp,idTax,Url...etc)
 
-      traficoTax.foreachPartition(putHBase)
-        }
+        traficoTax.foreachPartition(putHBase) 
+
+      }
     }
+
+       def parser(json: String):Array[String] = {
+         val parsedJson = parse(json)
+         val result = parsedJson.extract[adn]
+         //val parametros = parsedJson.extract[parametros]
+
+         return Array(result.idTracker,result.decay,result.url,result.ip,result.useragent,result.os,result.dispositivo,result.language)
+       }
 
        def putHBase(partitions: Iterator[Array[String]]):Unit = {
 
@@ -94,7 +112,7 @@ object streaming{
 
 
            for( i <- 2 to row.length-1){
-              println("Key "+row(0)+","+"timestamp "+row(1)+","+"columna "+""+row(i))
+             println("Key "+row(0)+","+"timestamp "+row(1)+","+"columna "+""+row(i))
             }
             //POR CADA COLUMNA REALIZO UN PUT
             //val put = new Put(Bytes.toBytes(putRecord(0).toString))//idTracker
@@ -110,6 +128,7 @@ object streaming{
     ssc.awaitTermination()
   }
 }
+
 
 
 
