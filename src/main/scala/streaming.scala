@@ -1,22 +1,9 @@
-import java.text.SimpleDateFormat
-import java.util.HashMap
-import org.junit.rules.TemporaryFolder
-import org.apache.hadoop.hbase.spark._
-import org.apache.hadoop.hbase.TableName
-import org.apache.hadoop.hbase.client._
-import org.apache.hadoop.hbase.exceptions._
-import org.apache.hadoop.hbase.CellComparator
-import org.apache.hadoop.hbase.client.{ConnectionFactory, _}
-import org.apache.hadoop.hbase.mapreduce.TableInputFormat
-import org.apache.hadoop.hbase.client.Increment
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable
-
 import _root_.kafka.serializer.{DefaultDecoder, StringDecoder}
-//import org.apache.hadoop.hbase.{HConstants, CellUtil, HBaseTestingUtility, TableName}
 import org.apache.hadoop.hbase.spark.HBaseDStreamFunctions._
 import org.apache.hadoop.hbase.{HBaseConfiguration, TableName}
 import org.apache.hadoop.hbase.spark.HBaseContext
 import org.apache.hadoop.hbase.util.Bytes
+import org.apache.hadoop.hbase.client._
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
@@ -26,17 +13,17 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 object streaming extends Serializable {
-//  implicit val formats = DefaultFormats
-  case class adn(idTracker: String, decay: String, url: String, ip: String, useragent: String, os: String, dispositivo: String, language: String)
+  //implicit val formats = DefaultFormats
+  //case class adn(idTracker: String, decay: String, url: String, ip: String, useragent: String, os: String, dispositivo: String, language: String)
 
   //  org.apache.log4j.BasicConfigurator.configure()
   def main(args: Array[String]) {
     /** EL código de spark conf para hacer el streaming */
 
-        val conf = new SparkConf().setAppName("HBaseStream")
-        if (sys.env("ENTORNO") == "DESARROLLO") {
-          conf.setMaster("local[*]")
-        }
+    val conf = new SparkConf().setAppName("HBaseStream")
+    if (sys.env("ENTORNO") == "DESARROLLO") {
+      conf.setMaster("local[*]")
+    }
 
     val ssc = new StreamingContext(conf, Seconds(1))
     val sc = ssc.sparkContext
@@ -54,7 +41,14 @@ object streaming extends Serializable {
     val topic = args(2) //Topic Kafka text
     val tabla = args(3) //HBase tabla 'usuarios'
     val columnFamily = args(4) //HBase column family 'adn'
-
+    /*
+    val rutaTax ="file:///Pablo/Taxonomias.csv" //URL a identificador de taxonomía
+    //val camposTax = "file:///Pablo/DictTax.csv" //identificador a taxoniomía
+    val camposGenerales = "file:///Pablo/dictVarSanitas.txt" //Campos que contiene el Json recibido
+    val topic = "test" //Topic Kafka text
+    val tabla = "usuarios" //HBase tabla 'usuarios'
+    val columnFamily = "adn" //HBase column family 'adn'
+    */
     val tax = sc.textFile(rutaTax)
     val taxFM = tax.map(x => (x.split(";")(0), x.split(";")(1)))
     val camposGeneralesRDD = sc.textFile(camposGenerales)
@@ -71,7 +65,7 @@ object streaming extends Serializable {
     val traficoRDD: DStream[(String, (String, Array[String]))] = lines.map(x => (compact(parse(x) \ "url").replaceAll("\"", ""), (compact(parse(x) \ "idTracker").replaceAll("\"", "") + compact(parse(x) \ "decay").replaceAll("\"", ""), Array(compact(parse(x) \ "ip").replaceAll("\"", ""), compact(parse(x) \ "useragent").replaceAll("\"", ""), compact(parse(x) \ "os").replaceAll("\"", ""), compact(parse(x) \ "dispositivo").replaceAll("\"", ""), compact(parse(x) \ "language").replaceAll("\"", "")))))
     val traficoTax: DStream[(String, Array[String], Array[String])] = traficoRDD.transform(rdd => rdd.join(taxFM).map(x => (x._2._1._1, Array(x._2._2.toString).union(x._2._1._2), Array("idTax" + x._2._2.toString).union(mapaVarGen))))
 
-    /**Llamamos al Put de HBase*/
+    /** Llamamos al Put de HBase */
     putHBase(traficoTax)
 
     def putHBase(partitions: DStream[(String, Array[String], Array[String])]) {
