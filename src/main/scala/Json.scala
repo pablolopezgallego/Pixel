@@ -1,4 +1,4 @@
-
+/*
 import _root_.kafka.serializer.{DefaultDecoder, StringDecoder}
 import org.apache.hadoop.hbase.client.{ConnectionFactory, Get}
 import org.apache.hadoop.hbase.mapreduce.{TableInputFormat}
@@ -113,4 +113,4 @@ object Json {
   }
 }
 Json.main(null)
-
+*/
