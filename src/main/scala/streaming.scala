@@ -75,8 +75,6 @@ object streaming {
     // + dateFormat.format(compact(parse(x) \ "decay").replaceAll("\"", "")).toString
     val traficoRDD = lines.map(x => (compact(parse(x) \ "url").replaceAll("\"", ""), (compact(parse(x) \ "idTracker").replaceAll("\"", ""), Array(compact(parse(x) \ "ip").replaceAll("\"", ""), compact(parse(x) \ "useragent").replaceAll("\"", ""), compact(parse(x) \ "os").replaceAll("\"", ""), compact(parse(x) \ "dispositivo").replaceAll("\"", ""), compact(parse(x) \ "language").replaceAll("\"", "")))))
     val traficoTax = traficoRDD.transform(rdd => rdd.join(taxFM).map(x => (x._2._1._1, Array(x._2._2.toString).union(x._2._1._2), Array("idTax" + x._2._2.toString).union(mapaVarGen))))
-
-    /** Llamamos al Put de HBase */
     //traficoTax.print()
 
     /** Inicializamos los valores de HBase */
@@ -88,17 +86,14 @@ object streaming {
     /** Hacemos el get */
     val idTrackerStream = traficoTax.map(x => Bytes.toBytes(x._1))
     //.slice(0, x._1.length() - 8)) //Me creo un rdd llamando al string idtrackers+fecha y le quito la fecha
-    val r = 4
-    getData(idTrackerStream)
+    val r = CalculoRecomendacion(traficoTax)
+    getDataAux(idTrackerStream)
     putData(traficoTax, r)
 
-    def CalculoRecomendacion(operacional: RDD[String], transaccional: DStream[(String, Array[String], Array[String])]): Int = {
-      val r = 4
-      r
-    }
+    //def CalculoRecomendacion(operacional: RDD[String], transaccional: DStream[(String, Array[String], Array[String])]): Int = {
 
-    def getData(rowStream: DStream[Array[Byte]]) {
-      rowStream.foreachRDD(rdd => {
+    def getDataAux(rowStream: DStream[Array[Byte]]){
+      val resultado = rowStream.transform(rdd => {
         val getRdd = hbaseContext.bulkGet[Array[Byte], String](
           TableName.valueOf("operacional" + tabla),
           2, // *************************************************************Estudiar más adelante cual debería ser el tamaño del bach
@@ -108,10 +103,10 @@ object streaming {
             new Get(record)
           },
           (result: Result) => {
-            println(result)
+            //println(result)
             val it = result.listCells().iterator()
             val b = new StringBuilder
-            b.append(Bytes.toString(result.getRow) + ":")
+            b.append("idTracker" + "," + Bytes.toString(result.getRow) + ";")
 
             while (it.hasNext) {
               val cell = it.next()
@@ -124,8 +119,10 @@ object streaming {
             }
             b.toString()
           })
-        getRdd.collect().foreach(v => println(v))
+        //getRdd.collect().foreach(v => println(v))
+        getRdd
       })
+      resultado.print()
     }
 
     /** Hacemos el Put */
@@ -143,12 +140,14 @@ object streaming {
           put
         })
     }
-
     ssc.start()
     ssc.awaitTermination()
   }
+  def CalculoRecomendacion(transaccional: DStream[(String, Array[String], Array[String])]): Int = {
+    val s = 3
+    s
+  }
 }
-
 streaming.main(null)
 
 
