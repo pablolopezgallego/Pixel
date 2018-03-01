@@ -1,4 +1,6 @@
+import java.net.InetSocketAddress
 import java.text.SimpleDateFormat
+
 import _root_.kafka.serializer.{DefaultDecoder, StringDecoder}
 import org.apache.hadoop.hbase.TableName.valueOf
 import org.apache.hadoop.hbase.spark.HBaseDStreamFunctions._
@@ -20,28 +22,28 @@ object streaming {
   //org.apache.log4j.BasicConfigurator.configure()
   def main(args: Array[String]) {
     /** EL código de spark conf para hacer el streaming */
+
+    val conf = new SparkConf().setAppName("HBaseStream")
+    if (sys.env("ENTORNO") == "DESARROLLO") {
+      conf.setMaster("local[*]")
+    }
+    val ssc = new StreamingContext(conf, Seconds(1))
+    val sc = ssc.sparkContext
+    val rutaTax = "file:///C:/Users/plopez/Desktop/Taxonomias.csv" //URL a identificador de taxonomía
+    //val camposTax = "file:///C:/Users/plopez/Desktop/DictTax.csv" //identificador a taxoniomía
+    val camposGenerales = "file:///C:/Users/plopez/Desktop/dictVarSanitas.txt" //Campos que contiene el Json recibido
+    val topic = "test2" //Topic Kafka text
+    val tabla = "usuarios" //HBase tabla 'usuarios'
+    val columnFamily = "adn" //HBase column family 'adn'
     /*
-        val conf = new SparkConf().setAppName("HBaseStream")
-        if (sys.env("ENTORNO") == "DESARROLLO") {
-          conf.setMaster("local[*]")
-        }
-        val ssc = new StreamingContext(conf, Seconds(1))
-        val sc = ssc.sparkContext
-        val rutaTax = "file:///C:/Users/plopez/Desktop/Taxonomias.csv" //URL a identificador de taxonomía
-        //val camposTax = "file:///C:/Users/plopez/Desktop/DictTax.csv" //identificador a taxoniomía
-        val camposGenerales = "file:///C:/Users/plopez/Desktop/dictVarSanitas.txt" //Campos que contiene el Json recibido
-        val topic = "test2" //Topic Kafka text
-        val tabla = "usuarios" //HBase tabla 'usuarios'
-        val columnFamily = "adn" //HBase column family 'adn'
-        */
     val ssc = new StreamingContext(sc, Seconds(1))
     val rutaTax = "file:///Pablo/Taxonomias.csv" //URL a identificador de taxonomía
     //val camposTax = "file:///Pablo/DictTax.csv" //identificador a taxoniomía
     val camposGenerales = "file:///Pablo/dictVarSanitas.txt" //Campos que contiene el Json recibido
-    val topic = "test2" //Topic Kafka text
+    val topic = "cliente2" //Topic Kafka text
     val tabla = "usuarios" //HBase tabla 'usuarios'
     val columnFamily = "adn" //HBase column family 'adn'
-
+*/
     /*
     val rutaTax = args(0) //URL a identificador de taxonomía
     //val camposTax = "file:///Pablo/DictTax.csv" //identificador a taxoniomía
@@ -52,7 +54,7 @@ object streaming {
     */
     /** KafkaConf tiene un Map de la ruta del server de kafka, la ruta del server de zookeeper, el grupo.id del consumidor para poder hacer redundancia, el timeout para conectar a zookeeper */
     val kafkaConf = Map("metadata.broker.list" -> "localhost:42111",
-      "zookeeper.connect" -> "localhost:21000",
+      "zookeeper.connect" -> "51.255.74.114:21000",
       "group.id" -> "kafka-example",
       "zookeeper.connection.timeout.ms" -> "1000",
       "zookeeper.session.timeout.ms" -> "10000")
@@ -69,7 +71,7 @@ object streaming {
     val lines = KafkaUtils.createStream[Array[Byte], String, DefaultDecoder, StringDecoder](
       ssc, kafkaConf, Map(topic -> 1),
       StorageLevel.MEMORY_ONLY_SER).map(_._2)
-    //lines.print()
+    lines.print()
 
     /** Trasformamos la linea de entrada que es un Json */
     //val dateFormat =  new SimpleDateFormat("yyyyMMdd")
@@ -77,7 +79,6 @@ object streaming {
     val traficoRDD = lines.map(x => (compact(parse(x) \ "url").replaceAll("\"", ""), (compact(parse(x) \ "idTracker").replaceAll("\"", ""), Array(compact(parse(x) \ "ip").replaceAll("\"", ""), compact(parse(x) \ "useragent").replaceAll("\"", ""), compact(parse(x) \ "os").replaceAll("\"", ""), compact(parse(x) \ "dispositivo").replaceAll("\"", ""), compact(parse(x) \ "language").replaceAll("\"", "")))))
     val traficoTax: DStream[(String, Array[String], Array[String])] = traficoRDD.transform(rdd => rdd.join(taxFM).map(x => (x._2._1._1, Array(x._2._2.toString).union(x._2._1._2), Array("idTax" + x._2._2.toString).union(mapaVarGen))))
     val traficoIdTracker = traficoTax.map(x => Bytes.toBytes(x._1))
-
     /** Inicializamos los valores para llamar a HBase */
     sc.setLogLevel("ERROR")
     val config = new HBaseConfiguration()
@@ -89,9 +90,9 @@ object streaming {
     var dataRecomendacion: DStream[(String, Int)] = null
     // val r = scala.util.Random No lo usamos porque no es paralelizable
     dataGet = getData(traficoIdTracker)
-    dataRecomendacion = recomendacion(traficoTax,dataGet)
-    putDataPixel(traficoTax)
-    putDataRecomendacion(dataRecomendacion)
+    //dataRecomendacion = recomendacion(traficoTax, dataGet)
+    //putDataPixel(traficoTax)
+    //putDataRecomendacion(dataRecomendacion)
 
     /** Hacemos el get y la recomendación, devolvemos idTracker, int */
     def getData(rowStream: DStream[Array[Byte]]): DStream[String] = {
@@ -125,7 +126,7 @@ object streaming {
           //getRdd.collect().foreach(v => println(v))
           getRdd
         })
-      //dataGet2.print()
+      dataGet2.print()
       dataGet2
     }
 
@@ -168,10 +169,11 @@ object streaming {
           put
         })
     }
+
     ssc.start()
     ssc.awaitTermination()
   }
 }
-streaming.main(null)
+//streaming.main(null)
 
 
