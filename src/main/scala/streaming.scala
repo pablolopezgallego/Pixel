@@ -1,6 +1,5 @@
 import java.net.InetSocketAddress
 import java.text.SimpleDateFormat
-
 import _root_.kafka.serializer.{DefaultDecoder, StringDecoder}
 import org.apache.hadoop.hbase.TableName.valueOf
 import org.apache.hadoop.hbase.spark.HBaseDStreamFunctions._
@@ -22,7 +21,7 @@ object streaming {
   //org.apache.log4j.BasicConfigurator.configure()
   def main(args: Array[String]) {
     /** EL código de spark conf para hacer el streaming */
-
+/*
     val conf = new SparkConf().setAppName("HBaseStream")
     if (sys.env("ENTORNO") == "DESARROLLO") {
       conf.setMaster("local[*]")
@@ -35,15 +34,15 @@ object streaming {
     val topic = "test2" //Topic Kafka text
     val tabla = "usuarios" //HBase tabla 'usuarios'
     val columnFamily = "adn" //HBase column family 'adn'
-    /*
+    */
     val ssc = new StreamingContext(sc, Seconds(1))
     val rutaTax = "file:///Pablo/Taxonomias.csv" //URL a identificador de taxonomía
     //val camposTax = "file:///Pablo/DictTax.csv" //identificador a taxoniomía
     val camposGenerales = "file:///Pablo/dictVarSanitas.txt" //Campos que contiene el Json recibido
-    val topic = "cliente2" //Topic Kafka text
+    val topic = "test2" //Topic Kafka text
     val tabla = "usuarios" //HBase tabla 'usuarios'
     val columnFamily = "adn" //HBase column family 'adn'
-*/
+
     /*
     val rutaTax = args(0) //URL a identificador de taxonomía
     //val camposTax = "file:///Pablo/DictTax.csv" //identificador a taxoniomía
@@ -54,15 +53,15 @@ object streaming {
     */
     /** KafkaConf tiene un Map de la ruta del server de kafka, la ruta del server de zookeeper, el grupo.id del consumidor para poder hacer redundancia, el timeout para conectar a zookeeper */
     val kafkaConf = Map("metadata.broker.list" -> "localhost:42111",
-      "zookeeper.connect" -> "51.255.74.114:21000",
+      "zookeeper.connect" -> "localhost:21000",
       "group.id" -> "kafka-example",
       "zookeeper.connection.timeout.ms" -> "1000",
       "zookeeper.session.timeout.ms" -> "10000")
 
     /** Tratamos los ficheros de datos */
-    val tax = sc.textFile(rutaTax)
+    val tax = sc.textFile(rutaTax, 1)
     val taxFM: RDD[(String, String)] = tax.map(x => (x.split(";")(0), x.split(";")(1))) //Taxonomías, un url corresponde a un int
-    val camposGeneralesRDD = sc.textFile(camposGenerales)
+    val camposGeneralesRDD = sc.textFile(camposGenerales, 1)
     val mapaVarGen: Array[String] = camposGeneralesRDD.map(x => x.replaceAll("parametros.", "")).collect //Columnas del Json que debemos usar
     //val camposTaxRDD = sc.textFile(camposTax)
     //val mapaTax = camposTaxRDD.map(x => (x.split(";")(0), 0)).collect()
@@ -74,11 +73,10 @@ object streaming {
     lines.print()
 
     /** Trasformamos la linea de entrada que es un Json */
-    //val dateFormat =  new SimpleDateFormat("yyyyMMdd")
-    // + dateFormat.format(compact(parse(x) \ "decay").replaceAll("\"", "")).toString
     val traficoRDD = lines.map(x => (compact(parse(x) \ "url").replaceAll("\"", ""), (compact(parse(x) \ "idTracker").replaceAll("\"", ""), Array(compact(parse(x) \ "ip").replaceAll("\"", ""), compact(parse(x) \ "useragent").replaceAll("\"", ""), compact(parse(x) \ "os").replaceAll("\"", ""), compact(parse(x) \ "dispositivo").replaceAll("\"", ""), compact(parse(x) \ "language").replaceAll("\"", "")))))
     val traficoTax: DStream[(String, Array[String], Array[String])] = traficoRDD.transform(rdd => rdd.join(taxFM).map(x => (x._2._1._1, Array(x._2._2.toString).union(x._2._1._2), Array("idTax" + x._2._2.toString).union(mapaVarGen))))
     val traficoIdTracker = traficoTax.map(x => Bytes.toBytes(x._1))
+
     /** Inicializamos los valores para llamar a HBase */
     sc.setLogLevel("ERROR")
     val config = new HBaseConfiguration()
@@ -86,19 +84,20 @@ object streaming {
     ssc.checkpoint("/tmp/spark_checkpoint")
 
     /** Variables para obtener datos de las funciones a las qiue llamamos */
-    var dataGet: DStream[String] = null
+    var dataGet: DStream[Array[(String, String)]] = null
     var dataRecomendacion: DStream[(String, Int)] = null
     // val r = scala.util.Random No lo usamos porque no es paralelizable
     dataGet = getData(traficoIdTracker)
-    //dataRecomendacion = recomendacion(traficoTax, dataGet)
-    //putDataPixel(traficoTax)
-    //putDataRecomendacion(dataRecomendacion)
+    dataGet.foreachRDD(x=>{ x.foreachPartition(y=>{ if(y.hasNext) y.next.foreach(println)})})
+    dataRecomendacion = recomendacion(traficoTax, dataGet)
+    putDataPixel(traficoTax)
+    putDataRecomendacion(dataRecomendacion)
 
     /** Hacemos el get y la recomendación, devolvemos idTracker, int */
-    def getData(rowStream: DStream[Array[Byte]]): DStream[String] = {
+    def getData(rowStream: DStream[Array[Byte]]): DStream[Array[(String, String)]] = {
       val dataGet2 =
         rowStream.transform(rdd => {
-          val getRdd = hbaseContext.bulkGet[Array[Byte], String](
+          val getRdd = hbaseContext.bulkGet[Array[Byte], Array[(String, String)]](
             TableName.valueOf("operacional" + tabla),
             2, // *************************************************************Estudiar más adelante cual debería ser el tamaño del bach
             rdd,
@@ -109,31 +108,30 @@ object streaming {
             (result: Result) => {
               //println(result)
               val it = result.listCells().iterator()
-              val b = new StringBuilder
-              b.append(Bytes.toString(result.getRow) + "|")
+              var b: Array[(String, String)] = Array(("idTracker", "Bytes.toString(result.getRow)"))
+              //print("Esto es b" + b.foreach(print))
 
               while (it.hasNext) {
                 val cell = it.next()
                 val q = Bytes.toString(CellUtil.cloneQualifier(cell))
                 if (q.equals("counter")) {
-                  b.append(q + "," + Bytes.toLong(CellUtil.cloneValue(cell)) + ";")
+                  b = b.union(Array((q, Bytes.toLong(CellUtil.cloneValue(cell)).toString())))
                 } else {
-                  b.append(q + "," + Bytes.toString(CellUtil.cloneValue(cell)) + ";")
+                  b = b.union(Array((q, Bytes.toString(CellUtil.cloneValue(cell)))))
                 }
               }
-              b.toString()
+              b
             })
-          //getRdd.collect().foreach(v => println(v))
+
           getRdd
         })
-      dataGet2.print()
       dataGet2
     }
 
     /** Generamos la recomendación */
-    def recomendacion(dataTransaccioal: DStream[(String, Array[String], Array[String])], dataOperacional: DStream[String]): DStream[(String, Int)] = {
+    def recomendacion(dataTransaccioal: DStream[(String, Array[String], Array[String])], dataOperacional: DStream[Array[(String, String)]]): DStream[(String, Int)] = {
 
-      /** Aquí se implementará la recomendación
+      /** Aquí se implementará la recomendació
         *
         * Falta modelo
         *
@@ -174,6 +172,7 @@ object streaming {
     ssc.awaitTermination()
   }
 }
-//streaming.main(null)
+
+streaming.main(null)
 
 
