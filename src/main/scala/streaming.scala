@@ -1,3 +1,5 @@
+import java.net.InetSocketAddress
+import java.text.SimpleDateFormat
 import _root_.kafka.serializer.{DefaultDecoder, StringDecoder}
 import org.apache.hadoop.hbase.TableName.valueOf
 import org.apache.hadoop.hbase.spark.HBaseDStreamFunctions._
@@ -14,44 +16,24 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-object streaming {
+object streaming{
   //case class adn(idTracker: String, decay: String, url: String, ip: String, useragent: String, os: String, dispositivo: String, language: String)
-  //org.apache.log4j.BasicConfigurator.configure()
   def main(args: Array[String]) {
     /** EL código de spark conf para hacer el streaming */
-
     val conf = new SparkConf().setAppName("HBaseStream")
     if (sys.env("ENTORNO") == "DESARROLLO") {
       conf.setMaster("local[*]")
     }
     val ssc = new StreamingContext(conf, Seconds(1))
     val sc = ssc.sparkContext
-    val rutaTax = "file:///C:/Users/plopez/Desktop/Taxonomias.csv" //URL a identificador de taxonomía
-    //val camposTax = "file:///C:/Users/plopez/Desktop/DictTax.csv" //identificador a taxoniomía
-    val camposGenerales = "file:///C:/Users/plopez/Desktop/dictVarSanitas.txt" //Campos que contiene el Json recibido
-    val topic = "test2" //Topic Kafka text
-    val grupo = topic+"2"
-    val tabla = "usuarios" //HBase tabla 'usuarios'
-    val columnFamily = "adn" //HBase column family 'adn'
-    /*
-    val ssc = new StreamingContext(sc, Seconds(1))
-    val rutaTax = "file:///Pablo/Taxonomias.csv" //URL a identificador de taxonomía
-    //val camposTax = "file:///Pablo/DictTax.csv" //identificador a taxoniomía
-    val camposGenerales = "file:///Pablo/dictVarSanitas.txt" //Campos que contiene el Json recibido
-    val topic = "test2" //Topic Kafka text
-    val grupo = topic+"2"
-    val tabla = "usuarios" //HBase tabla 'usuarios'
-    val columnFamily = "adn" //HBase column family 'adn'
-*/
-    /*
+
     val rutaTax = args(0) //URL a identificador de taxonomía
-    //val camposTax = "file:///Pablo/DictTax.csv" //identificador a taxoniomía
     val camposGenerales = args(1) //Campos que contiene el Json recibido
     val topic = args(2) //Topic Kafka text
-    val grupo = topic+"2"
+    val grupo = topic+"Streaming"
     val tabla = args(3) //HBase tabla 'usuarios'
     val columnFamily = args(4) //HBase column family 'adn'
-    */
+
     /** KafkaConf tiene un Map de la ruta del server de kafka, la ruta del server de zookeeper, el grupo.id del consumidor para poder hacer redundancia, el timeout para conectar a zookeeper */
     val kafkaConf = Map("metadata.broker.list" -> "localhost:42111",
       "zookeeper.connect" -> "localhost:21000",
@@ -64,8 +46,6 @@ object streaming {
     val taxFM: RDD[(String, String)] = tax.map(x => (x.split(";")(0), x.split(";")(1))) //Taxonomías, un url corresponde a un int
     val camposGeneralesRDD = sc.textFile(camposGenerales, 1)
     val mapaVarGen: Array[String] = camposGeneralesRDD.map(x => x.replaceAll("parametros.", "")).collect //Columnas del Json que debemos usar
-    //val camposTaxRDD = sc.textFile(camposTax)
-    //val mapaTax = camposTaxRDD.map(x => (x.split(";")(0), 0)).collect()
 
     /** Los valores que recibe kafka son 4, un streaming context, el kafkaCOnf, un Map del tópic transformado en integer y el cuarto es como guardar los datos, según este ejemplo solo cojo el value (la key no) */
     val lines = KafkaUtils.createStream[Array[Byte], String, DefaultDecoder, StringDecoder](
@@ -87,7 +67,6 @@ object streaming {
     /** Variables para obtener datos de las funciones a las qiue llamamos */
     var dataGet: DStream[Array[(String, String)]] = null
     var dataRecomendacion: DStream[(String, Int)] = null
-    // val r = scala.util.Random No lo usamos porque no es paralelizable
     dataGet = getData(traficoIdTracker)
     dataGet.foreachRDD(x=>{ x.foreachPartition(y=>{ if(y.hasNext) y.next.foreach(println)})})
     dataRecomendacion = recomendacion(traficoTax, dataGet)
@@ -103,11 +82,9 @@ object streaming {
             2, // *************************************************************Estudiar más adelante cual debería ser el tamaño del bach
             rdd,
             record => {
-              //System.out.println("making Get")
               new Get(record)
             },
             (result: Result) => {
-              //println(result)
               val it = result.listCells().iterator()
               var b: Array[(String, String)] = Array(("idTracker", "Bytes.toString(result.getRow)"))
               //print("Esto es b" + b.foreach(print))
@@ -123,6 +100,7 @@ object streaming {
               }
               b
             })
+
           getRdd
         })
       dataGet2
@@ -136,7 +114,6 @@ object streaming {
         * Falta modelo
         *
         */
-
       dataTransaccioal.map(x => (x._1, 5))
     }
 
@@ -146,7 +123,7 @@ object streaming {
         hbaseContext,
         valueOf("transaccional" + tabla),
         (row) => {
-          //METO CADA COLUMNA Y SOLO REALIZO UN PUT
+          //INSERTO CADA COLUMNA Y REALIZO UN ÚNICO PUT
           val put = new Put(Bytes.toBytes(row._1)) //idTracker
           for (x <- 0 until row._2.length) {
             put.addColumn(Bytes.toBytes(columnFamily), Bytes.toBytes(row._3(x)), Bytes.toBytes(row._2(x))) //colFamily,col,timestamp,value
@@ -166,12 +143,9 @@ object streaming {
           put
         })
     }
-
     ssc.start()
     ssc.awaitTermination()
   }
 }
-
-streaming.main(null)
 
 
