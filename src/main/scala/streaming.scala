@@ -1,5 +1,3 @@
-import java.net.InetSocketAddress
-import java.text.SimpleDateFormat
 import _root_.kafka.serializer.{DefaultDecoder, StringDecoder}
 import org.apache.hadoop.hbase.TableName.valueOf
 import org.apache.hadoop.hbase.spark.HBaseDStreamFunctions._
@@ -21,7 +19,7 @@ object streaming {
   //org.apache.log4j.BasicConfigurator.configure()
   def main(args: Array[String]) {
     /** EL código de spark conf para hacer el streaming */
-/*
+
     val conf = new SparkConf().setAppName("HBaseStream")
     if (sys.env("ENTORNO") == "DESARROLLO") {
       conf.setMaster("local[*]")
@@ -32,29 +30,32 @@ object streaming {
     //val camposTax = "file:///C:/Users/plopez/Desktop/DictTax.csv" //identificador a taxoniomía
     val camposGenerales = "file:///C:/Users/plopez/Desktop/dictVarSanitas.txt" //Campos que contiene el Json recibido
     val topic = "test2" //Topic Kafka text
+    val grupo = topic+"2"
     val tabla = "usuarios" //HBase tabla 'usuarios'
     val columnFamily = "adn" //HBase column family 'adn'
-    */
+    /*
     val ssc = new StreamingContext(sc, Seconds(1))
     val rutaTax = "file:///Pablo/Taxonomias.csv" //URL a identificador de taxonomía
     //val camposTax = "file:///Pablo/DictTax.csv" //identificador a taxoniomía
     val camposGenerales = "file:///Pablo/dictVarSanitas.txt" //Campos que contiene el Json recibido
     val topic = "test2" //Topic Kafka text
+    val grupo = topic+"2"
     val tabla = "usuarios" //HBase tabla 'usuarios'
     val columnFamily = "adn" //HBase column family 'adn'
-
+*/
     /*
     val rutaTax = args(0) //URL a identificador de taxonomía
     //val camposTax = "file:///Pablo/DictTax.csv" //identificador a taxoniomía
     val camposGenerales = args(1) //Campos que contiene el Json recibido
     val topic = args(2) //Topic Kafka text
+    val grupo = topic+"2"
     val tabla = args(3) //HBase tabla 'usuarios'
     val columnFamily = args(4) //HBase column family 'adn'
     */
     /** KafkaConf tiene un Map de la ruta del server de kafka, la ruta del server de zookeeper, el grupo.id del consumidor para poder hacer redundancia, el timeout para conectar a zookeeper */
     val kafkaConf = Map("metadata.broker.list" -> "localhost:42111",
       "zookeeper.connect" -> "localhost:21000",
-      "group.id" -> "kafka-example",
+      "group.id" -> grupo,
       "zookeeper.connection.timeout.ms" -> "1000",
       "zookeeper.session.timeout.ms" -> "10000")
 
@@ -122,7 +123,6 @@ object streaming {
               }
               b
             })
-
           getRdd
         })
       dataGet2
@@ -131,7 +131,7 @@ object streaming {
     /** Generamos la recomendación */
     def recomendacion(dataTransaccioal: DStream[(String, Array[String], Array[String])], dataOperacional: DStream[Array[(String, String)]]): DStream[(String, Int)] = {
 
-      /** Aquí se implementará la recomendació
+      /** Aquí se implementará la recomendación
         *
         * Falta modelo
         *
@@ -146,7 +146,7 @@ object streaming {
         hbaseContext,
         valueOf("transaccional" + tabla),
         (row) => {
-          //POR CADA COLUMNA REALIZO UN PUT
+          //METO CADA COLUMNA Y SOLO REALIZO UN PUT
           val put = new Put(Bytes.toBytes(row._1)) //idTracker
           for (x <- 0 until row._2.length) {
             put.addColumn(Bytes.toBytes(columnFamily), Bytes.toBytes(row._3(x)), Bytes.toBytes(row._2(x))) //colFamily,col,timestamp,value
@@ -161,7 +161,6 @@ object streaming {
         hbaseContext,
         valueOf("transaccional" + tabla),
         (row) => {
-          //POR CADA COLUMNA REALIZO UN PUT
           val put = new Put(Bytes.toBytes(row._1)) //idTracker
           put.addColumn(Bytes.toBytes(columnFamily), Bytes.toBytes("recomendacion"), Bytes.toBytes(row._2.toString)) //colFamily,col,timestamp,value
           put
