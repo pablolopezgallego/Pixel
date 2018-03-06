@@ -10,7 +10,7 @@ object Productor extends App {
 
   val producer = new KafkaProducer[String, String](props)
 
-  val TOPIC = "test2" //El topic que vamos a usar
+  val TOPIC = "streamingSanitas" //El topic que vamos a usar
 
   //Bucle de prueba para enviar siempre los mismos datos
   val record = new ProducerRecord(TOPIC, "key", "{\"idTracker\":\"09013f4b164366c73d57f9f1e43c4a33\",\"ip\":\"::ffff:159.147.124.253\",\"url\":\"http://www.clinicalondres.es/tratamientos-tienes-40-anos-promociones-clinicalondres\",\"parametros\":{\"referer\":\"\",\"evar7\":\"\",\"evar39\":\"\",\"evar49\":\"\"},\"decay\":1513211004544,\"useragent\":\"Chrome\",\"os\":\"Windows\",\"dispositivo\":\"PC\",\"language\":\"es-ES\"}")
